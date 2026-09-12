@@ -1,0 +1,33 @@
+name: Check Friptadium Stock
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'   # toutes les 10 minutes
+  workflow_dispatch:          # permet de le lancer manuellement pour tester
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@v4
+
+      - name: Installer Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Vérifier le stock
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
+        run: python friptadium_stock_bot.py
+
+      - name: Sauvegarder l'état pour le prochain check
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Mise à jour état stock"
+          file_pattern: friptadium_state.json
