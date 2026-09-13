@@ -2,11 +2,15 @@ name: Check Friptadium Stock
 
 on:
   schedule:
-    - cron: '*/10 * * * *'   # toutes les 10 minutes
+    - cron: '0 */5 * * *'   # relance toutes les 5h (marge de sécurité avant la limite de 6h de GitHub)
   workflow_dispatch:          # permet de le lancer manuellement pour tester
 
 permissions:
   contents: write
+
+concurrency:
+  group: stock-check
+  cancel-in-progress: true    # évite d'avoir deux boucles actives en même temps
 
 jobs:
   check:
@@ -20,14 +24,24 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Vérifier le stock
+      - name: Boucle de vérification (~45 sec entre chaque check, pendant ~5h45)
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
-        run: python friptadium_stock_bot.py
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Sauvegarder l'état pour le prochain check
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "Mise à jour état stock"
-          file_pattern: friptadium_state.json
+          END=$((SECONDS + 20700))   # 5h45 en secondes
+
+          while [ $SECONDS -lt $END ]; do
+            python friptadium_stock_bot.py
+
+            if ! git diff --quiet friptadium_state.json 2>/dev/null; then
+              git add friptadium_state.json
+              git commit -m "Mise à jour état stock"
+              git push
+            fi
+
+            sleep 45
+          done
